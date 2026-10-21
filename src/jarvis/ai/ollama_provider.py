@@ -78,3 +78,63 @@ class OllamaProvider:
             raise RuntimeError("Ollama response did not contain generated text.")
 
         return generated_text.strip()
+
+    def generate_chat_response(
+            self,
+            messages: list[dict[str, str]],
+    ) -> str:
+        """Generate a response using the supplied conversation history."""
+        if not messages:
+            raise ValueError("Conversation messages cannot be empty.")
+
+        for message in messages:
+            if (
+                not isinstance(message, dict)
+                or message.get("role") not in {"user", "assistant", "system"}
+                or not isinstance(message.get("content"), str)
+                or not message["content"].strip()
+            ):
+                raise ValueError("Each message must have a valid role and non-empty content.")
+
+        url = f"{self.base_url}/api/chat"
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False
+        }
+
+        request = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json"
+            },
+            method="POST",
+        )
+
+        start_time = time.perf_counter()
+
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                result = json.loads(response.read().decode("utf-8"))
+
+        except HTTPError as exc:
+            details = exc.read().decode("utf-8")
+            logger.error("Ollama returned HTTP %s: %s", exc.code, details)
+            raise RuntimeError(f"Ollama returned HTTP {exc.code}: {details}") from exc
+
+        
+        elapsed = time.perf_counter() - start_time
+        logger.info("Ollama chat response generated in %.2f seconds", elapsed)
+
+        message = result.get("message")
+
+        if not isinstance(message, dict) or not isinstance(
+            message.get("content"), str
+        ):
+            raise RuntimeError(
+                "Ollama response did not contain a valid assistant message."
+            )
+
+        return message["content"].strip()

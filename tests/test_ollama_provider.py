@@ -61,6 +61,60 @@ class TestOllamaProvider(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.provider.generate_response("   ")
 
+    
+    @patch("jarvis.ai.ollama_provider.urlopen")
+    def test_generate_chat_response_success(self, mock_urlopen):
+        expected_response = "Your favourite language is Python."
+
+        response = Mock()
+        response.read.return_value = json.dumps(
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": expected_response,
+                }
+            }
+        ).encode("utf-8")
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = response
+
+        messages = [
+            {
+                "role": "user",
+                "content": "My favourite programming language is Python.",
+            },
+            {
+                "role": "assistant",
+                "content": "That is great!",
+            },
+            {
+                "role": "user",
+                "content": "What is my favourite programming language?",
+            },
+        ]
+
+        result = self.provider.generate_chat_response(messages)
+
+        self.assertEqual(result, expected_response)
+
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+
+        self.assertEqual(payload["model"], "llama3.2:3b")
+        self.assertEqual(payload["messages"], messages)
+        self.assertFalse(payload["stream"])
+
+    def test_generate_chat_response_rejects_empty_messages(self):
+        with self.assertRaises(ValueError):
+            self.provider.generate_chat_response([])
+
+    def test_generate_chat_response_rejects_invalid_message(self):
+        with self.assertRaises(ValueError):
+            self.provider.generate_chat_response(
+                [{"role": "invalid", "content": "Hello"}]
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

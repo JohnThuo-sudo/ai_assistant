@@ -31,6 +31,10 @@ def main() -> None:
 
     print("Ollama is connected.")
     print("Jarvis is ready! Type 'exit' or 'quit' to stop.")
+    print("Type 'clear' to clear the conversation history.")
+
+    #Conversation history exists only for this running session.
+    messages: list[dict[str, str]] = []
 
     logger.info("Jarvis application initialized")
 
@@ -44,15 +48,38 @@ def main() -> None:
         if not user_message:
             continue
 
-        if user_message.lower() in {"exit", "quit"}:
+        command = user_message.lower()
+
+        if command in {"exit", "quit"}:
             print("Jarvis: Goodbye!")
             break
 
+        if command == "clear":
+            messages.clear()
+            print("Jarvis: Conversation history cleared.")
+            continue
+
+        #Add the new user message to the conversation
+        messages.append({
+            "role": "user",
+            "content": user_message,
+        })
+
         try:
-            response = provider.generate_response(user_message)
+            response = provider.generate_chat_response(messages)
             print(f"\nJarvis: {response}")
 
+            # Store Jarvis's reply so future prompts have context.
+            messages.append({
+                "role": "assistant",
+                "content": response,
+            })
+
         except RuntimeError as exc:
+            #Remove the unanswered message so history stays consistent
+            messages.pop()
+
+
             logger.error("Failed to generate a response: %s", exc)
             print(f"\nJarvis encountered an error: {exc}")
 
